@@ -10,6 +10,7 @@
 #include "util.h"
 #include "validation.h"
 
+ECCVerifyHandle globalVerifyHandle;
 int main(int argc, char **argv) {
     SHA256AutoDetect();
     RandomInit();
@@ -17,7 +18,7 @@ int main(int argc, char **argv) {
     SetupEnvironment();
     fPrintToDebugLog = false; // don't want to write to debug.log file
 
-    benchmark::BenchRunner::RunAll();
+    benchmark::BenchRunner::RunAll(1);
 
     ECC_Stop();
 }

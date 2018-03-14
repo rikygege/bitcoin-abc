@@ -23,6 +23,8 @@
 
 #endif  // defined(LEVELDB_PLATFORM_POSIX_SSE)
 
+unsigned long count_of_crc32c = 0;
+unsigned long size_of_crc32c = 0;
 namespace leveldb {
 namespace port {
 
@@ -56,6 +58,10 @@ uint32_t AcceleratedCRC32C(uint32_t crc, const char* buf, size_t size) {
   return 0;
 #else
 
+#if 0 //jt for debug
+  size_of_crc32c += size;
+  count_of_crc32c++;
+#endif
   const uint8_t *p = reinterpret_cast<const uint8_t *>(buf);
   const uint8_t *e = p + size;
   uint32_t l = crc ^ 0xffffffffu;

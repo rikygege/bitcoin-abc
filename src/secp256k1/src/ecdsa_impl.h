@@ -198,6 +198,14 @@ static int secp256k1_ecdsa_sig_serialize(unsigned char *sig, size_t *size, const
     return 1;
 }
 
+static __inline__ unsigned long long GetCycleCount(void)
+{
+        unsigned hi,lo;
+        __asm__ volatile("rdtsc":"=a"(lo),"=d"(hi));
+        return ((unsigned long long)lo)|(((unsigned long long)hi)<<32);
+}
+unsigned long time_of_secp256k1_ecdsa_sig_verify = 0;
+unsigned long count_of_secp256k1_ecdsa_sig_verify = 0;
 static int secp256k1_ecdsa_sig_verify(const secp256k1_ecmult_context *ctx, const secp256k1_scalar *sigr, const secp256k1_scalar *sigs, const secp256k1_ge *pubkey, const secp256k1_scalar *message) {
     unsigned char c[32];
     secp256k1_scalar sn, u1, u2;
@@ -210,12 +218,16 @@ static int secp256k1_ecdsa_sig_verify(const secp256k1_ecmult_context *ctx, const
     if (secp256k1_scalar_is_zero(sigr) || secp256k1_scalar_is_zero(sigs)) {
         return 0;
     }
-
+    unsigned long t1,t2;
+    t1 = (unsigned long)GetCycleCount();
     secp256k1_scalar_inverse_var(&sn, sigs);
     secp256k1_scalar_mul(&u1, &sn, message);
     secp256k1_scalar_mul(&u2, &sn, sigr);
     secp256k1_gej_set_ge(&pubkeyj, pubkey);
     secp256k1_ecmult(ctx, &pr, &pubkeyj, &u2, &u1);
+    t2 = (unsigned long)GetCycleCount();
+    time_of_secp256k1_ecdsa_sig_verify += (t2 - t1);
+    count_of_secp256k1_ecdsa_sig_verify ++;
     if (secp256k1_gej_is_infinity(&pr)) {
         return 0;
     }

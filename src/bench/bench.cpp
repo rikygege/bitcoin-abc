@@ -45,8 +45,25 @@ void benchmark::BenchRunner::RunAll(double elapsedTimeForOne) {
               << "\n";
 
     for (const auto &p : benchmarks()) {
-        State state(p.first, elapsedTimeForOne);
-        p.second(state);
+        if ("ReadMyDb" == p.first)
+        //if ("MyVerifyScriptBench_old" == p.first)
+        {
+            State state(p.first, elapsedTimeForOne);
+            p.second(state);
+            break;
+        }
+        if (0 && "SHA256" == p.first)
+        {
+            State state(p.first, elapsedTimeForOne);
+            p.second(state);
+            break;
+        }
+        if (0 && "MyVerifyScriptBench_old" == p.first)
+        {
+            State state(p.first, elapsedTimeForOne);
+            p.second(state);
+            break;
+        }
     }
     perf_fini();
 }

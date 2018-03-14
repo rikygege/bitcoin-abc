@@ -986,6 +986,143 @@ UniValue pruneblockchain(const Config &config, const JSONRPCRequest &request) {
     return uint64_t(height);
 }
 
+static std::vector<COutPoint> mykeys;
+static unsigned long unableGetCount = 0;
+
+//! Calculate statistics about the unspent transaction output set
+static bool ScanUTXO(CCoinsView *view, CCoinsStats &stats) {
+    std::unique_ptr<CCoinsViewCursor> pcursor(view->Cursor());
+
+    CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+    stats.hashBlock = pcursor->GetBestBlock();
+    {
+        LOCK(cs_main);
+        stats.nHeight = mapBlockIndex.find(stats.hashBlock)->second->nHeight;
+    }
+    ss << stats.hashBlock;
+    uint256 prevkey;
+    std::map<uint32_t, Coin> outputs;
+    unsigned long nm = 0;
+    while (pcursor->Valid()) {
+        boost::this_thread::interruption_point();
+        COutPoint key;
+        Coin coin;
+        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
+            if (!outputs.empty() && key.hash != prevkey) {
+                ApplyStats(stats, ss, prevkey, outputs);
+                outputs.clear();
+            }
+            prevkey = key.hash;
+            outputs[key.n] = std::move(coin);
+        } else {
+            return error("%s: unable to read value", __func__);
+        }
+        if(nm++ % 30 == 0) //Add 1/30 UTXO in mykeys.
+        {
+            mykeys.push_back(key);
+
+            if (!pcoinsTip->GetCoin(key, coin)) {
+                unableGetCount++;
+            }
+        }
+        pcursor->Next();
+    }
+    if (!outputs.empty()) {
+        ApplyStats(stats, ss, prevkey, outputs);
+    }
+    stats.hashSerialized = ss.GetHash();
+    stats.nDiskSize = view->EstimateSize();
+    return true;
+}
+
+static __inline__ unsigned long long GetCycleCount(void)
+{
+        unsigned hi,lo;
+        __asm__ volatile("rdtsc":"=a"(lo),"=d"(hi));
+        return ((unsigned long long)lo)|(((unsigned long long)hi)<<32);
+}
+UniValue testtxout(const Config &config, const JSONRPCRequest &request) {
+    if (request.fHelp || request.params.size() != 0) {
+        throw std::runtime_error(
+            "testtxout\n"
+            "\nReturns statistics about the unspent transaction output set.\n"
+            "Note this call may take some time.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"height\":n,     (numeric) The current block height (index)\n"
+            "  \"bestblock\": \"hex\",   (string) the best block hash hex\n"
+            "  \"transactions\": n,      (numeric) The number of transactions\n"
+            "  \"txouts\": n,            (numeric) The number of output "
+            "transactions\n"
+            "  \"bogosize\": n,          (numeric) A database-independent "
+            "metric for UTXO set size\n"
+            "  \"hash_serialized\": \"hash\",   (string) The serialized hash\n"
+            "  \"disk_size\": n,         (numeric) The estimated size of the "
+            "chainstate on disk\n"
+            "  \"total_amount\": x.xxx          (numeric) The total amount\n"
+            "}\n"
+            "\nExamples:\n" +
+            HelpExampleCli("testtxout", "") +
+            HelpExampleRpc("testtxout", ""));
+    }
+
+    UniValue ret(UniValue::VOBJ);
+
+    CCoinsStats stats;
+    FlushStateToDisk();
+    if (ScanUTXO(pcoinsTip, stats)) {
+        ret.push_back(Pair("height", int64_t(stats.nHeight)));
+        ret.push_back(Pair("bestblock", stats.hashBlock.GetHex()));
+        ret.push_back(Pair("transactions", int64_t(stats.nTransactions)));
+        ret.push_back(Pair("txouts", int64_t(stats.nTransactionOutputs)));
+        ret.push_back(Pair("bogosize", int64_t(stats.nBogoSize)));
+        ret.push_back(Pair("hash_serialized", stats.hashSerialized.GetHex()));
+        ret.push_back(Pair("disk_size", stats.nDiskSize));
+        ret.push_back(
+            Pair("total_amount", ValueFromAmount(stats.nTotalAmount)));
+        ret.push_back(Pair("keys", mykeys.size()));
+        ret.push_back(Pair("unableGetCount", unableGetCount));
+    } else {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to read UTXO set");
+    }
+
+#define MAX 1000000
+    unsigned long time_of_CSHA256_Write = 0;
+    unsigned int size = mykeys.size();
+    unsigned long t1,t2;
+    srand((unsigned)time(NULL));
+    t1 = (unsigned long)GetCycleCount();
+#if 1 //test in blockchain disk
+    for(int i = 0; i < MAX; i++)
+    {
+        Coin coin;
+        COutPoint key;
+        key = mykeys.at(rand()%size);
+        CTransactionRef tx;
+        uint256 hashBlock;
+        if (!GetTransaction(config, key.hash, tx, hashBlock, true)) {
+            throw JSONRPCError(
+                    RPC_INVALID_ADDRESS_OR_KEY,
+                    "No such mempool or blockchain transaction");
+        }
+    }
+#else //test in UTXO
+    for(int i = 0; i < MAX; i++)
+    {
+        Coin coin;
+        COutPoint key;
+        key = mykeys.at(rand()%size);
+        if (!pcoinsTip->GetCoin(key, coin)) {
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Unable to test UTXO set");
+        }
+    }
+#endif
+    t2 = (unsigned long)GetCycleCount();
+    time_of_CSHA256_Write = (t2 - t1);
+    ret.push_back(Pair("cyclesOf1MAcc", time_of_CSHA256_Write));
+    return ret;
+}
+
 UniValue gettxoutsetinfo(const Config &config, const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() != 0) {
         throw std::runtime_error(
@@ -1038,12 +1175,10 @@ UniValue gettxout(const Config &config, const JSONRPCRequest &request) {
             "gettxout \"txid\" n ( include_mempool )\n"
             "\nReturns details about an unspent transaction output.\n"
             "\nArguments:\n"
-            "1. \"txid\"             (string, required) The transaction id\n"
-            "2. \"n\"                (numeric, required) vout number\n"
-            "3. \"include_mempool\"  (boolean, optional) Whether to include "
-            "the mempool. Default: true."
-            "     Note that an unspent output that is spent in the mempool "
-            "won't appear.\n"
+            "1. \"txid\"       (string, required) The transaction id\n"
+            "2. n              (numeric, required) vout number\n"
+            "3. include_mempool  (boolean, optional) Whether to include the "
+            "mempool\n"
             "\nResult:\n"
             "{\n"
             "  \"bestblock\" : \"hash\",    (string) the block hash\n"
@@ -1746,6 +1881,7 @@ static const CRPCCommand commands[] = {
     { "blockchain",         "getrawmempool",          getrawmempool,          true,  {"verbose"} },
     { "blockchain",         "gettxout",               gettxout,               true,  {"txid","n","include_mempool"} },
     { "blockchain",         "gettxoutsetinfo",        gettxoutsetinfo,        true,  {} },
+    { "blockchain",         "testtxout",              testtxout,              true,  {} },
     { "blockchain",         "pruneblockchain",        pruneblockchain,        true,  {"height"} },
     { "blockchain",         "verifychain",            verifychain,            true,  {"checklevel","nblocks"} },
     { "blockchain",         "preciousblock",          preciousblock,          true,  {"blockhash"} },

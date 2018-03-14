@@ -276,9 +276,21 @@ CSHA256::CSHA256() : bytes(0) {
     sha256::Initialize(s);
 }
 
+static __inline__ unsigned long long GetCycleCount(void)
+{
+        unsigned hi,lo;
+        __asm__ volatile("rdtsc":"=a"(lo),"=d"(hi));
+        return ((unsigned long long)lo)|(((unsigned long long)hi)<<32);
+}
+unsigned long time_of_CSHA256_Write = 0;
+unsigned long count_of_CSHA256_Write = 0;
+unsigned long data_len_of_CSHA256_Write = 0;
 CSHA256 &CSHA256::Write(const uint8_t *data, size_t len) {
     const uint8_t *end = data + len;
     size_t bufsize = bytes % 64;
+    unsigned long t1,t2;
+    data_len_of_CSHA256_Write += len;
+    t1 = (unsigned long)GetCycleCount();
     if (bufsize && bufsize + len >= 64) {
         // Fill the buffer, and process it.
         memcpy(buf + bufsize, data, 64 - bufsize);
@@ -298,6 +310,9 @@ CSHA256 &CSHA256::Write(const uint8_t *data, size_t len) {
         memcpy(buf + bufsize, data, end - data);
         bytes += end - data;
     }
+    t2 = (unsigned long)GetCycleCount();
+    time_of_CSHA256_Write += (t2 - t1);
+    count_of_CSHA256_Write ++;
     return *this;
 }
 

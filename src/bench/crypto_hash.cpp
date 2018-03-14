@@ -16,7 +16,11 @@
 #include "utiltime.h"
 
 /* Number of bytes to hash per iteration */
-static const uint64_t BUFFER_SIZE = 1000 * 1000;
+//static const uint64_t BUFFER_SIZE = 1000 * 1000;
+static const uint64_t BUFFER_SIZE = 3 * 1000;
+extern unsigned long time_of_CSHA256_Write;
+extern unsigned long count_of_CSHA256_Write;
+extern unsigned long data_len_of_CSHA256_Write;
 
 static void RIPEMD160(benchmark::State &state) {
     uint8_t hash[CRIPEMD160::OUTPUT_SIZE];
@@ -37,6 +41,9 @@ static void SHA256(benchmark::State &state) {
     std::vector<uint8_t> in(BUFFER_SIZE, 0);
     while (state.KeepRunning())
         CSHA256().Write(in.data(), in.size()).Finalize(hash);
+    std::cout << "CSHA256::Write use " << time_of_CSHA256_Write << " cycles\n";
+    std::cout << "CSHA256::Write run " << count_of_CSHA256_Write << " times\n";
+    std::cout << "CSHA256::Write data len is " << data_len_of_CSHA256_Write/count_of_CSHA256_Write << " bytes\n";
 }
 
 static void SHA256_32b(benchmark::State &state) {
