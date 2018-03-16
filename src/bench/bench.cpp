@@ -45,8 +45,14 @@ void benchmark::BenchRunner::RunAll(double elapsedTimeForOne) {
               << "\n";
 
     for (const auto &p : benchmarks()) {
-        if ("ReadMyDb" == p.first)
+        if ("MyHashDisk" == p.first)
         //if ("MyVerifyScriptBench_old" == p.first)
+        {
+            State state(p.first, elapsedTimeForOne);
+            p.second(state);
+            break;
+        }
+        if (0 && "ReadMyDb" == p.first)
         {
             State state(p.first, elapsedTimeForOne);
             p.second(state);

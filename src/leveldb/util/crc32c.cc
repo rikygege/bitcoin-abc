@@ -301,6 +301,9 @@ static bool CanAccelerateCRC32C() {
 }
 
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
+#if 0 //jt cancel the crc32
+    return 0;
+#endif
   static bool accelerate = CanAccelerateCRC32C();
   if (accelerate) {
     return port::AcceleratedCRC32C(crc, buf, size);

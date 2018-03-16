@@ -149,6 +149,7 @@ static bool LoadMempool(CTxMemPool& pool) {
         }
         std::map<uint256, Amount> mapDeltas;
         file >> mapDeltas;
+        file.fclose();
     } catch (const std::exception &e) {
         LogPrintf("Failed to deserialize mempool data on disk: %s. Continuing "
                   "anyway.\n",
