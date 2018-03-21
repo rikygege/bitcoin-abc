@@ -23,6 +23,7 @@ bench_bench_bitcoin_SOURCES = \
   bench/mempool_eviction.cpp \
   bench/my_mempool.cpp \
   bench/my_db.cpp \
+  bench/my_hash_disk.cpp \
   bench/base58.cpp \
   bench/my_verify_script.cpp \
   bench/lockedpool.cpp \
